@@ -1,0 +1,46 @@
+# This is the protocol I used for the Mouse ChIP dataset by Lolas et al. 2014
+# Since this dataset had some issues I tried several other settings for the peak calling 
+#
+#
+## Alignment
+
+# With BWA mem algorithm 
+bwa mem -t 8 mm9.fa MockChIPSeq/SRR1168500.fastq | samtools view -Sb  > SRR1168500-mockChIP.bam
+bwa mem -t 8 mm9.fa brachyuryChIPSeqantibody/SRR1168501.fastq | samtools view -Sb >SRR1168501-antibody1.bam
+bwa mem -t 8 mm9.fa brachyuryChIPSeqantibody2/SRR1168502.fastq | samtools view -Sb >SRR1168502-antibody2.bam
+
+# With bowtie 
+bowtie -S -p 8 bowtie_index/mm9 MockChIPSeq/SRR1168500.fastq bowtie_SRR1168500-mockChIP.sam
+bowtie -S -p 8 bowtie_index/mm9 brachyuryChIPSeqantibody/SRR1168501.fastq bowtie_SRR1168501-antibody1.sam
+bowtie -S -p 8 bowtie_index/mm9 brachyuryChIPSeqantibody2/SRR1168502.fastq bowtie_SRR1168502-antibody2.bam
+
+## Convert to BED format
+bamToBed -i SRR1168500-mockChIP.bam >SRR1168500-mockChIP.bed
+bamToBed -i SRR1168501-antibody1.bam >SRR1168501-antibody1.bed
+bamToBed -i SRR1168502-antibody2.bam >SRR1168502-antibody2.bed
+
+## Run peakzilla with default settings
+
+python peakzilla.py SRR1168501-antibody1.bed SRR1168500-mockChIP.bed >SRR1168501-antibody1.tsv
+python peakzilla.py SRR1168502-antibody2.bed SRR1168500-mockChIP.bed >SRR1168502-antibody2.tsv
+
+## Run peakzilla with lower score cut-off settings 
+python peakzilla.py -s 0.25 SRR1168501-antibody1.bed SRR1168500-mockChIP.bed >SRR1168501-antibody1_025.tsv
+python peakzilla.py -s 0.25 SRR1168502-antibody2.bed SRR1168500-mockChIP.bed >SRR1168502-antibody2_025.tsv
+python peakzilla.py -s 0.5 SRR1168501-antibody1.bed SRR1168500-mockChIP.bed >SRR1168501-antibody1_050.tsv
+python peakzilla.py -s 0.5 SRR1168502-antibody2.bed SRR1168500-mockChIP.bed >SRR1168502-antibody2_050.tsv
+python peakzilla.py -s 0.75 SRR1168501-antibody1.bed SRR1168500-mockChIP.bed >SRR1168501-antibody1_075.tsv
+python peakzilla.py -s 0.75 SRR1168502-antibody2.bed SRR1168500-mockChIP.bed >SRR1168502-antibody2_075.tsv
+
+## Run peakzilla with different enrichment cut-off
+
+python peakzilla.py -c 3 -s 0.5 SRR1168501-antibody1.bed SRR1168500-mockChIP.bed >SRR1168501-antibody1_enrichment3.tsv
+python peakzilla.py -c 3 -s 0.5 SRR1168502-antibody2.bed SRR1168500-mockChIP.bed >SRR1168502-antibody2_enrichment3.tsv
+python peakzilla.py -c 5 -s 0.5 SRR1168501-antibody1.bed SRR1168500-mockChIP.bed >SRR1168501-antibody1_enrichment5.tsv
+python peakzilla.py -c 5 -s 0.5 SRR1168502-antibody2.bed SRR1168500-mockChIP.bed >SRR1168502-antibody2_enrichment5.tsv
+
+##Run macs2
+
+macs2 callpeak -t ../SRR1168501-antibody1.bam -c ../SRR1168500-mockChIP.bam -f BAM -g mm -n macs2_SRR1168501.bam -B -q 0.01
+macs2 callpeak -t ../SRR1168502-antibody2.bam -c ../SRR1168500-mockChIP.bam -f BAM -g mm -n macs2_SRR1168502.bam -B -q 0.01
+

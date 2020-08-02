@@ -1,0 +1,14 @@
+#!/usr/bin/python
+import sys
+import argparse
+from Bio import SeqIO
+parser=argparse.ArgumentParser(
+description=''' Extract fasta sequences from genome/proteome 
+				USAGE: getfasta -ge GENOME -id ID ''')
+parser.add_argument('-ge', '--genome_file', required=True, help='Genome/Proteome file')
+parser.add_argument('-id', '--fasta_id', required=True)
+args=parser.parse_args()
+idd = args.fasta_id.strip()
+genome 	= SeqIO.to_dict(SeqIO.parse(args.genome_file,'fasta'))
+sequence = genome[idd]
+print '>'+sequence.id+'\n'+sequence.seq

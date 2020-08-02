@@ -1,0 +1,423 @@
+---
+title: "BRACHYURY GRN PROTOCOL"
+author: "Rohit Dnyansagar"
+date: "December 13, 2018"
+output:
+  html_document: 
+    number_sections: TRUE
+  pdf_document: default
+---
+
+
+
+# ChIP-seq 
+## Quality control
+
+```{bash chip1, eval = FALSE}
+
+module load fastqc
+
+for f in *.fastq ;do  echo fastqc -f fastq -t 8 $f ;done
+```
+
+When all the quality control reports have been done, we can then proceed to run multiqc. Multiqc produces a nice report of the quality control to be presented. To run multiqc, it is very convinient to have all the fastqc reports in a directory. Once the reports are in one directory run multiqc as 
+```{bash multiqc, eval = FALSE}
+
+# module load multiqc 
+
+multiqc .
+```
+
+
+## Adapter trimming 
+```{bash, eval =F}
+
+cutadapt -j 4 -a ATCACGAT -A TCTTTCCC -o FoxA_ab1_EKDL200000449-1a_H2L5YDSXY_L2_1.cutadapt.fastq -p FoxA_ab1_EKDL200000449-1a_H2L5YDSXY_L2_2.cutadapt.fastq /scratch/patricio/patricio_data/FoxA_ab1/FoxA_ab1_EKDL200000449-1a_H2L5YDSXY_L2_1.fq.gz /scratch/patricio/patricio_data/FoxA_ab1/FoxA_ab1_EKDL200000449-1a_H2L5YDSXY_L2_2.fq.gz
+
+# CGATGTAT TCTTTCCC
+cutadapt -j 4 -a CGATGTAT -A TCTTTCCC -o FoxA_ab2_EKDL200000450-1a_H2L5YDSXY_L2_1.cutadapt.fastq  -p FoxA_ab2_EKDL200000450-1a_H2L5YDSXY_L2_2.cutadapt.fastq /scratch/patricio/patricio_data/FoxA_ab2/FoxA_ab2_EKDL200000450-1a_H2L5YDSXY_L2_1.fq.gz  /scratch/patricio/patricio_data/FoxA_ab2/FoxA_ab2_EKDL200000450-1a_H2L5YDSXY_L2_2.fq.gz
+
+```
+
+## Read mapping 
+Before we start read mapping using BWA, we need to generate index for the genome.fasta using command 
+
+```{bash chip2, eval = FALSE}
+bwa index genome.fasta
+
+```
+
+In this project we did read mpping with BWA -mem algorithm which is generally recommended for high-quality queries as it is faster and more accurate. The script to generate BWA commands is called as follows. The script is ment for paired end reads files. The script takes in either of of the paired end read files and generates a command for BWA. Here we want to generate commands for multiple runs we are using * wildcard to take all files in directory. 
+
+```{bash chip3, eval = FALSE}
+bash support_scripts/runBWA.sh SRR*_1.fastq >bwa.cmd
+```
+
+To run the job on the slurm either in array mode or in normal mode specification of --constraint is mandatory in CUBE environment while other parameters are optional. 
+
+```{bash chip4, eval = FALSE}
+sbatch --constraint=array-8core --mem=16G bwa.cmd
+
+# Interpro annotation array jobs
+
+sbatch --array=1-400 --constraint=array-1core --mem=8G Spur5.cmd
+
+# ./nq -F array-8core -m 16 -c 8 bwa.cmd
+```
+
+The resulting alignment bam files needs to be sorted and converted to Bed format as follows 
+
+```{bash chip5, eval = FALSE}
+module load samtools 
+module load bedtools 
+
+for i  in *.bwa.bam ;do samtools sort -@ 8 $f |bamToBed -i - >$(basename $f .bam).bed ; done 
+```
+
+
+
+## Peak calling
+
+To call the peaks we used package [peakzilla](https://github.com/steinmann/peakzilla). Peakzilla is more suitable for the identification of the transcription factor binding sites as compared to [MACS](https://github.com/taoliu/MACS). Peakzilla was called as 
+
+```{bash chip6, eval = FALSE}
+# Example of mouse dataset, similar command is used for other datasets
+
+peakzilla.py  SRR5659911.bwa.bed SRR56560901.bwa.bed >SRR5659911.tsv
+```
+
+## Common peaks
+
+
+In this case (Mouse ChIP) we used default values for Enrichment(2) and Score(1). In case of the Nematostella ChIP vectensis the score cutoff is 5 and Enrichment of 2. In case of the Xenopus tropicalis ChIP. 
+Mouse dataset has a single ChIP and INPUT replicates, therefore we dont have to find a common peaks between replicates. However in the case of Xenopus tropicalis and Nematostella vectensis we do have a replicates and therefore needs a script to find common peaks between the replicates. We used GenomicRanges R package to find common peaks between replicates 
+
+Selection of common peaks between replicates
+
+```{r chip7, eval = FALSE}
+
+common_peaks.R
+
+```
+
+## Peak association 
+Conventionally we associate peaks to closest gene, however there are multiple cases where the nearest gene may not be real target. Therefore we decided to find two closest genes instead of one and decide between two closest genes as a real target. There are two ways  to get two closest genes from the peak 
+
+**Using bedtools closest**
+
+```{bash chip8, eval = FALSE}
+# -D decides between distance from 'a' or distance from 'b'
+# -k option tells how many closest genes to report 
+module load bedtools 
+bedtools closest \
+-a /home/rohit/Projects/2/Xtr/xenopus_Bra_peaks_score_cutoff_181121_fil.bed \
+-b /home/rohit/Projects/2/Xtr/GCF_000004195.3_Xenopus_tropicalis_v9.1_genomic.srt.bed \
+-t first -D "b" -k 2 \
+|awk 'BEGIN{OFS="\t"}{print $13, $14, $15, $17, $18, $19 ,$4, $1, $2, $3, $6, $NF}' >output.txt
+# Merge output froM this with python script
+# /mnt/cube/scratch/brachyury/associate_genes/
+python bedtools_merge.py output.txt >merged_output.txt
+
+```
+
+**Using Bob'python script**
+
+Script and its supporting files are located at /scratch/dnyansagar/brachyury/associate_genes/
+```{bash chip9, eval = FALSE}
+# Usage:  associate_genes.py [options] PEAKFILE GENEFILE 
+python support_scripts/merge_isoforms/associate_genes.py \
+  --format BED \
+  --max-distance=500000 \
+  Mmu_Bra_peaks_common_peaks.bed \
+  mm10_ensembl_compr.protein_coding.supergene.srt.bed \
+  |awk '!($12="")($19="")' OFS='\t' >Mmu_Bra_peaks_common_peaks.bob_script.bothtargets.txt
+
+```
+
+
+# Motif analysis 
+
+## MEME-ChIP
+
+For motif analysis we used MEME-chip package along with [JASPAR](http://jaspar.genereg.net/downloads/) database. Currently one can download directly MEME formatted pwms from the database however I downloaded the JASPAR pwm and used jaspar2meme to convert pwm to MEME format. 
+
+```{bash motif1, eval = FALSE}
+# see meme-chip help documentation
+
+meme-chip -oc meme-chip-nmotif10 \
+-index-name index.html \
+-db /export/home/dnyansagar/2/JASPAR/nonredundantJasparBundle \
+-meme-mod anr \
+-meme-minw 5 \
+-meme-maxw 30 \
+-meme-nmotifs 10 \
+-dreme-e 0.05 \
+-centrimo-score 5\
+-centrimo-ethresh 10 Chip-seq.fasta
+
+# Output files at 
+# /export/home/dnyansagar/2/Final_meme-chip-Mmu_new_paper
+# /export/home/dnyansagar/2/Final_meme-chip-Nve
+# /export/home/dnyansagar/2/Final_meme-chip-Spu-All-337Peak
+# /export/home/dnyansagar/2/Final_meme-chip-Xtr_new_genome
+```
+
+## MEME-ChIP Parsing
+MEME-ChIP reports Centrally ernriched motifs as well as scans the peak region for other matching motifs from the database, in our case JASPAR. To know where the Chipped motif is and where other transcription factor motifs are in relation to Chipped motif, I wrote a python script which can be used as follows.
+
+```{bash, eval = FALSE}
+
+python memeParser.py /path/to/meme-chip/output/directory
+
+# Path of meme-chip output directory which is specified by
+# -oc parameter of meme-chip
+
+```
+
+
+
+# RNA-seq analysis 
+
+## Quality control 
+Quality control step is same as followed in section on ChIP-seq analysis
+
+## Read mapping 
+For differential expression analysis I tried two approaches 
+- One with current conventional methods wherein we map the reads to genome using tools such as STAR, BWA, Bowtie etc. Followed by the counting the reads mapped to specific features with featureCounts or HTSeq. The actual differential expression analysis is done by the tools which use negative binomial distribution, namely DESeq2 and edgeR  
+- Second newer method which uses pseudo-alignment to transcriptome along with bootstrapping namely Kallisto which also counts reads mapped to specific features. Actual differential expression analysis is done by package Sleuth. 
+
+**Approach one**
+
+For read mapping for differential expression analysis we used STAR aligner since it performs better in terms of speed as it uses suffix-arrays instead of suffix-trees. Additionally it also has wrapper around suffix-array for efficiantly identifying splice junctions. To use STAR aligner we need to generate index for the genome of interest. STAR can also make use of transcript features while generating index. Transcripts features can be supplied as GTF file, if GFF3 file is available instead of GTF file we can convert the GFF3 to GTF file using gffread from Cufflinks package as follows
+
+```{bash de1, eval = FALSE}
+gffread -T small.gff3 -o small.gtf
+```
+
+STAR index generating can take a lot of memory. For example to generate latest mouse genome index I needed 40 GB of memory. Then STAR index can be generated as follows.  
+
+```{bash de2, eval = FALSE}
+STAR --runThreadN 8 \
+--limitGenomeGenerateRAM=40000000000 \
+--runMode genomeGenerate \
+--genomeDir index/star/ \
+--genomeFastaFiles ensembl/Mus_musculus.GRCm38.dna.toplevel.fa \
+--sjdbGTFfile Mus_musculus.GRCm38.94.gtf
+```
+
+Once the index are generated mapping can be done using shell script runSTAR.sh, which calls the star-wrapper.sh. Edit the genome index path along with any other parameters you want to change iN the wrapper file and then start STAR mapping as follows for paired end reads
+
+```{bash de3, eval = FALSE}
+
+module load star
+bash runSTAR.sh SRR*_1.fastq >star.cmd
+
+```
+
+## Feature Counts
+
+featureCounts is a part of subread package which needs to be loaded 
+Once the mapping is finished 
+```{bash de4, eval = FALSE}
+module load subread
+
+for f in *Aligned.sortedByCoord.out.bam; do \ 
+featureCounts -p -T 16 -t exon -g gene_id \
+-a ../files/Xenopus_tropicalis.JGI_4.2.94.gtf \
+-o $(basename $f Aligned.sortedByCoord.out.bam).fastq.fc.txt \$f
+
+```
+
+Once the tables of counts are done I used the SARTools package. SARTools is a wrapper script around two widely used packages namely deseq2 and edgeR.
+
+```{r de5, eval = FALSE }
+mmu_deseq2.R
+
+```
+
+**Approach two**
+
+We build kallisto index for desired **transcriptome** as 
+```{bash de6, eval = FALSE}
+kallisto index -i index.name.idx transcriptome.fa
+```
+
+We add the path and index name we just created to file runKallisto.sh and run the script as 
+```{bash de7, eval = FALSE}
+runKallisto.sh SRR*_1.fastq
+```
+
+Kallisto creates a folder for each sample we put all these folder in a single folder to make use of these folder easier in further analysis. Further analysis is done with tool sleuth 
+
+```{r de8, eval = FALSE}
+mmu_sleuth.R
+```
+
+# Post processing  {.tabset}
+
+## Differential Expression selection
+
+```{bash 01_processing, eval = FALSE}
+# /mnt/evo/Bra/processing/01_select_deseq
+python select_deseq.py
+
+```
+
+## ChIP target selection
+
+```{bash 02_processing, eval = FALSE}
+# /mnt/evo/Bra/processing/02_select_target
+python select_target_undecided.py 
+```
+
+## Combine data to make tables
+
+```{bash 03_processing, eval = FALSE}
+# /mnt/evo/Bra/processing/03_make_tables
+python data_compilation_prof.py
+```
+
+## Create chart data files
+
+```{bash 04_processing, eval = FALSE}
+# /mnt/evo/Bra/processing/04_chart_data
+python chart_data.py
+```
+
+# Figures
+
+## Distance distribution 
+
+```{r  figures1, eval = FALSE}
+/home/rohit/Dropbox/DataScience/Bra/distance_distribution.R
+```
+
+## Motif data
+
+```{r figures2, eval = FALSE}
+/home/rohit/Dropbox/DataScience/Bra/Motif_data.R
+```
+
+## RNA-seq pictures
+
+```{bash figures3, eval = FALSE}
+# multiqc picures
+# DESeq2 / edgeR pictures 
+# sleuth pictures
+```
+
+## GO Ontology pictures
+
+```{r figures4, eval = FALSE}
+/mnt/evo/GO/topGO.R 
+```
+
+## Ortholog table pictures
+
+```{r figures5, eval = FALSE}
+/home/rohit/Dropbox/DataScience/Bra/Bra_orthologs_info.R
+```
+
+
+# Miscellaneous
+
+## Average distance between genes 
+
+**First we can use closest-feature from BEDOPS **
+We need bed files sorted to calculate distance between genes 
+bedtools sort -i file.bed >file.srt.bed
+
+with awk we only print chrom, feature1, feature2, distance
+
+```{bash closest-feature, eval = FALSE}
+
+module load bedops 
+closest-features --no-overlaps --delim "\t" --dist \
+GCF_000004195.3_Xenopus_tropicalis_v9.1_genomic.srt.bed \
+GCF_000004195.3_Xenopus_tropicalis_v9.1_genomic.srt.bed \
+|awk '{print $1,"\t",$4,"\t",$16,"\t",$NF}'|less
+
+```
+
+**Second we can used regular BEDTOOLS**
+parameters used here are 
+-d :- report distance between two closest feature
+-s :- give distance of the closest feature on the same strand
+-io :- ignore overlapping features
+-N :- two closest feature should have different name
+with awk we only print chrom, feature1, feature2, distance
+
+```{bash bedtools-closest, eval = FALSE}
+
+bedtools closest -s -d -io -N \
+-a GCF_000004195.3_Xenopus_tropicalis_v9.1_genomic.srt.bed \
+-b GCF_000004195.3_Xenopus_tropicalis_v9.1_genomic.srt.bed \
+|awk '{print $1,"\t",$4,"\t",$16,"\t",$NF}' 
+
+```
+
+
+## Generate venn diagram and associated table
+
+In the third step of post processing we use the script **data_compilation.py**. The script also outputs OMA accesions of ChIP targets and DE genes in separate files (Usually ending in the date when the script was run, for eg. mmuschip2018-11-12.txt or mmusde2018-11-06.txt). I used these files to generate venn diagrams showing common/species specific targets and differentially expressed genes. There are several tools available to make venn diagram online as well as some R packages. However I found tool hosted at University of Gent to be most comprehensive as the quality of picture was good, it also provides subsets lists in text format and it gives picture in graphic vector format which can be edited further to suit our needs. The tool is hosted at [http://bioinformatics.psb.ugent.be/webtools/Venn/](http://bioinformatics.psb.ugent.be/webtools/Venn/). Get the svg files and text files. Open the text file in text editor(gedit) and replace '\n\t\t' with ' ' and '\t' with ',' 
+
+The resulting file can used with script '/export/home/dnyansagar/2/OMA/venn_output_parse.py' on evo server to generate the tables with subset ids and gene annotations. 
+
+
+# Other useful commands 
+### Remove version numbers of Ensembl ids from selected columns 
+
+```{bash ensembl_ver, eval = FALSE }
+awk 'BEGIN{OFS="\t"}{print substr($1, 1, 18), $2}' mmu_de_filtered2018-12-16.csv
+awk 'BEGIN{OFS="\t"}{print $1, $2, $3, $4, $5, $6, \
+substr($7, 1, 18),$8,$9,$10, $11, $12, \
+substr($13, 1, 18), $14, $15, $16, $17, $18}'\ 
+Mmu_T_ChIP.tra_targets3.bed
+
+```
+
+### Make bedgraph files to be loaded with Gviz to make screenshots of peaks
+
+```{bash bedgraph, eval = FALSE}
+for f in data/*.srt.bam; do echo "bedtools genomecov -ibam $f -bg -g /proj/dnyansagar/brachyury/mm10/mm10.fa |gzip - > $(basename $f .srt.bam).bedgraph.gz" ;done 
+
+for f in *.srt.bam ;do bedtools genomecov -ibam $f -bg -g /proj/dnyansagar/brachyury/mm10/mm10.fa |gzip - > $(basename $f .srt.bam).bedgraph.gz; done
+
+# Output
+bedtools genomecov -ibam data/SRR5168547.bwa.srt.bam -bg -g /proj/dnyansagar/brachyury/mm10/mm10.fa |gzip - > SRR5168547.bwa.bedgraph.gz
+bedtools genomecov -ibam data/SRR56560901.bwa.srt.bam -bg -g /proj/dnyansagar/brachyury/mm10/mm10.fa |gzip - > SRR56560901.bwa.bedgraph.gz
+bedtools genomecov -ibam data/SRR5659911.bwa.srt.bam -bg -g /proj/dnyansagar/brachyury/mm10/mm10.fa |gzip - > SRR5659911.bwa.bedgraph.gz
+
+
+```
+
+### Sort text on the go
+
+```{bash sortstrings, eval = FALSE}
+ echo "zebra ant spider spider ant zebra ant" | xargs -n1 | sort -u | xargs
+
+```
+
+### Find intended files and delete
+
+In this case I wanted to remove files without extensions created during oma run. 
+```{bash, eval = FALSE}
+find Cache/AllAll/xtrn/xtrn/ -type f ! -name "*.*" -exec rm -i {} \;
+
+```
+
+### Get fasta ids from multifasta file 
+with grep  and remove '>' and other description from the fasta sequence to get fasta id.
+
+```{bash getfastaid , eval = FALSE}
+grep '^>ENSMUS' all_t-box.fasta |sed -e 's/>//' -e 's/ .*//g' >mmu_tbox
+
+```
+
+### get sequences from multifasta
+Use the above created list of ids to get fasta sequences using my python script 
+
+```{bash getfastaseq , eval = FALSE}
+while read F ; do /home/rohit/Dropbox/brachyury/getfasta -ge all_t-box.fasta -id $F ; done <mmu_tbox
+```
+
