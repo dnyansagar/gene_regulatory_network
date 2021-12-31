@@ -30,8 +30,10 @@ Where scripts used to
 <br />
 
 **3. Data processing**
+<br />
 In this section the ortholog data along with chip target data and DE genes information is compiled into a single table
-
+<br />
+A general layout of the study is as follows
 
 ![alt text](https://github.com/dnyansagar/gene_regulatory_network/blob/master/support_scripts/projectLayout.png?raw=true)
 
