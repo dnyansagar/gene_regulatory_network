@@ -26,9 +26,9 @@ Where scripts used to
      See repository of SARTools (https://github.com/PF2-pasteur-fr/SARTools)
 <br />
   ii. Additional filtering criterion for the genes that have already passed the alpha significance filter.
+<br />
+<br />
 
-<br />
-<br />
 **3. Data processing**
 In this section the ortholog data along with chip target data and DE genes information is compiled into a single table
 
