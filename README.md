@@ -1,10 +1,12 @@
 # Brachyury Gene Regulatory Network
 <br />
-Study gene regulatory network with a combination of ChIP-seq, RNA-seq, and comparative genomics
-This repository is a collection of scripts used for the study of the transcription factor brachyury. 
+<br />
+This repository is a collection of scripts used for the study of the transcription factor brachyury. To study the gene regulatory network of the brachyury a combination of ChIP-seq, RNA-seq, and comparative genomics was used.
 The project overall is divided into three parts
+
 <br />
 <br />
+
 **1. chip (ChIP-seq)** 
 Where scripts used to 
 <br />
