@@ -29,7 +29,6 @@ Where scripts used to
 
 <br />
 <br />
-
 **3. Data processing**
 In this section the ortholog data along with chip target data and DE genes information is compiled into a single table
 
