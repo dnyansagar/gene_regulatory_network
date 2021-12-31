@@ -3,6 +3,7 @@ Study gene regulatory network with a combination of ChIP-seq, RNA-seq, and compa
 This repository is a collection of scripts used for the study of the transcription factor brachyury. 
 The project overall is divided into three parts
 <br />
+<br />
 **1. chip (ChIP-seq)** 
 Where scripts used to 
 <br />
@@ -15,6 +16,7 @@ Where scripts used to
        The parameters for the MEME-ChIP and FIMO programs are listed in motif_parameters.txt file.
        The output of these two programs was parsed with assign_centrimo_motifs.py and web_fimo.py respectively. 
 <br />
+<br />
 **2. rnaseq (RNA-seq)**
 <br />
   i. For RNA-seq a wrapper script around the two most widely used DEG analysis packages i.e DESeq2 and edgeR called SARTools is used. 
@@ -22,6 +24,7 @@ Where scripts used to
 <br />
   ii. Additional filtering criterion for the genes that have already passed the alpha significance filter.
 
+<br />
 <br />
 
 **3. Data processing**
