@@ -14,3 +14,4 @@ N. vectensis
 S. purpuratus
 <br />
 <br />
+![alt text](https://github.com/dnyansagar/gene_regulatory_network/blob/master/rnaseq/multiqc_spu.jpg)
