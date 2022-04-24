@@ -11,3 +11,6 @@ X. tropicalis
 <br />
 N. vectensis
 ![alt text](https://github.com/dnyansagar/gene_regulatory_network/blob/master/rnaseq/multiqc_nve.jpg)
+S. purpuratus
+<br />
+<br />
